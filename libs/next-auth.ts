@@ -18,6 +18,13 @@ export const authOptions: NextAuthOptionsExtended = {
       // Follow the "Login with Google" tutorial to get your credentials
       clientId: process.env.GOOGLE_ID,
       clientSecret: process.env.GOOGLE_SECRET,
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code"
+        }
+      },
       async profile(profile) {
         return {
           id: profile.sub,
