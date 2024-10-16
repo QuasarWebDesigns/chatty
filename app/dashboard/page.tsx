@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus, Play, ArrowRight } from "lucide-react";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
-import ButtonAccount from "@/components/ButtonAccount";
+import { Sidebar } from "@/components/Sidebar"; // Import the Sidebar component
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ export default async function Dashboard() {
     <div className="flex flex-col min-h-screen">
       <SubscriptionBanner />
       <div className="flex flex-1">
-        <Sidebar />
+        <Sidebar /> {/* Use the Sidebar component here */}
         <main className="flex-1 p-8 pb-24">
           <section className="max-w-xl mx-auto space-y-8">
             <h1 className="text-3xl md:text-4xl font-extrabold">Private Page</h1>
@@ -28,7 +28,6 @@ export default async function Dashboard() {
             <h2 className="text-3xl font-bold">Chatbots</h2>
             <div className="flex items-center space-x-4">
               <Input type="search" placeholder="Search your chatbot" className="max-w-sm" />
-              <ButtonAccount />
             </div>
           </div>
 
