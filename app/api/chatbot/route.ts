@@ -23,81 +23,62 @@ async function generateEmbedding(text: string) {
 }
 
 function chunkEmbedding(embedding: number[], chunkSize: number) {
-  const chunks = [];
-  for (let i = 0; i < embedding.length; i += chunkSize) {
-    chunks.push({
-      chunk: embedding.slice(i, i + chunkSize),
-      startIndex: i,
-      endIndex: Math.min(i + chunkSize, embedding.length),
-    });
+  return embedding.reduce((chunks, _, i) => {
+    if (i % chunkSize === 0) {
+      chunks.push({
+        chunk: embedding.slice(i, i + chunkSize),
+        startIndex: i,
+        endIndex: Math.min(i + chunkSize, embedding.length),
+      });
+    }
+    return chunks;
+  }, []);
+}
+
+async function processDocument(file: File) {
+  const content = await file.text();
+  const embedding = await generateEmbedding(content);
+  const embeddingChunks = chunkEmbedding(embedding, CHUNK_SIZE);
+  return { name: file.name, content, embeddingChunks };
+}
+
+async function createChatbotWithDocuments(name: string, automaticPopup: boolean, popupText: string, userId: string, processedDocuments: any[]) {
+  const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId });
+  const createdDocuments = await Promise.all(processedDocuments.map(doc => 
+    Document.create({ ...doc, chatbotId: chatbot._id })
+  ));
+  chatbot.documents = createdDocuments.map(doc => doc._id);
+  await chatbot.save();
+  return chatbot;
+}
+
+async function authenticateRequest(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user) {
+    throw new Error("Unauthorized");
   }
-  return chunks;
+  return session.user;
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  await connectMongo();
-
-  const formData = await req.formData();
-  const name = formData.get('name') as string;
-  const automaticPopup = formData.get('automaticPopup') === 'true';
-  const popupText = formData.get('popupText') as string;
-  const documents = formData.getAll('documents') as File[];
-
-  if (!name || documents.length === 0) {
-    return NextResponse.json({ error: "Name and documents are required" }, { status: 400 });
-  }
-
   try {
-    console.log("Processing documents...");
-    const processedDocuments = await Promise.all(documents.map(async (file, index) => {
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const content = buffer.toString('utf-8');
-      console.log(`Generating embedding for document ${index + 1}: ${file.name}`);
-      const embedding = await generateEmbedding(content);
-      const embeddingChunks = chunkEmbedding(embedding, CHUNK_SIZE);
-      console.log(`Embedding generated and chunked for ${file.name}. Chunks: ${embeddingChunks.length}`);
-      return {
-        name: file.name,
-        content,
-        embeddingChunks,
-      };
-    }));
+    const user = await authenticateRequest(req);
+    await connectMongo();
 
-    console.log("Creating chatbot...");
-    const chatbot = await Chatbot.create({
-      name,
-      automaticPopup,
-      popupText,
-      userId: session.user.id,
-    });
+    const formData = await req.formData();
+    const name = formData.get('name') as string;
+    const automaticPopup = formData.get('automaticPopup') === 'true';
+    const popupText = formData.get('popupText') as string;
+    const documents = formData.getAll('documents') as File[];
 
-    // Create documents and link them to the chatbot
-    const createdDocuments = await Promise.all(processedDocuments.map(async (doc) => {
-      const document = await Document.create({
-        name: doc.name,
-        content: doc.content,
-        embeddingChunks: doc.embeddingChunks,
-        chatbotId: chatbot._id,
-      });
-      return document._id;
-    }));
+    if (!name || documents.length === 0) {
+      return NextResponse.json({ error: "Name and documents are required" }, { status: 400 });
+    }
 
-    // Update chatbot with document references
-    chatbot.documents = createdDocuments;
-    await chatbot.save();
+    const processedDocuments = await Promise.all(documents.map(processDocument));
+    const chatbot = await createChatbotWithDocuments(name, automaticPopup, popupText, user.id, processedDocuments);
 
-    console.log("Created chatbot with documents:", JSON.stringify(chatbot, null, 2));
-
-    const serializedChatbot = chatbot.toJSON();
-    console.log("Serialized chatbot:", JSON.stringify(serializedChatbot, null, 2));
-
-    return NextResponse.json(serializedChatbot, { status: 201 });
+    return NextResponse.json(chatbot.toJSON(), { status: 201 });
   } catch (error) {
     console.error("Error creating chatbot:", error);
     return NextResponse.json({ error: "Failed to create chatbot", details: error.message }, { status: 500 });
@@ -105,15 +86,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  await connectMongo();
-
   try {
-    const chatbots = await Chatbot.find({ userId: session.user.id });
+    const user = await authenticateRequest(req);
+    await connectMongo();
+
+    const chatbots = await Chatbot.find({ userId: user.id });
     const serializedChatbots = chatbots.map(chatbot => ({
       id: chatbot._id.toString(),
       name: chatbot.name,
@@ -132,22 +109,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  await connectMongo();
-
-  const url = new URL(req.url);
-  const id = url.searchParams.get('id');
-
-  if (!id) {
-    return NextResponse.json({ error: "Chatbot ID is required" }, { status: 400 });
-  }
-
   try {
-    const chatbot = await Chatbot.findOneAndDelete({ _id: id, userId: session.user.id });
+    const user = await authenticateRequest(req);
+    await connectMongo();
+
+    const url = new URL(req.url);
+    const id = url.searchParams.get('id');
+
+    if (!id) {
+      return NextResponse.json({ error: "Chatbot ID is required" }, { status: 400 });
+    }
+
+    const chatbot = await Chatbot.findOneAndDelete({ _id: id, userId: user.id });
 
     if (!chatbot) {
       return NextResponse.json({ error: "Chatbot not found or not authorized to delete" }, { status: 404 });
@@ -161,30 +134,22 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  await connectMongo();
-
-  const { messages, chatbotId } = await req.json();
-
   try {
-    // Verify that the chatbot belongs to the user
-    const chatbot = await Chatbot.findOne({ _id: chatbotId, userId: session.user.id });
+    const user = await authenticateRequest(req);
+    await connectMongo();
+
+    const { messages, chatbotId } = await req.json();
+
+    const chatbot = await Chatbot.findOne({ _id: chatbotId, userId: user.id });
     if (!chatbot) {
       return NextResponse.json({ error: "Chatbot not found or unauthorized" }, { status: 404 });
     }
 
-    console.log("Sending messages to OpenAI:", messages);
     const response = await sendOpenAi(messages, parseInt(chatbotId));
-    console.log("LLM Response:", response);
 
     if (response) {
       return NextResponse.json({ response });
     } else {
-      console.log("Empty response from LLM");
       return NextResponse.json({ error: 'Empty response from AI' }, { status: 500 });
     }
   } catch (error) {
