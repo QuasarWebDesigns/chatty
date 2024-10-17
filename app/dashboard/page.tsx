@@ -6,23 +6,32 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus, Play, ArrowRight } from "lucide-react";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
-import { Sidebar } from "@/components/Sidebar"; // Import the Sidebar component
+import { Sidebar } from "@/components/Sidebar";
 import { AddChatbotModal } from "@/components/AddChatbotModal";
+import connectMongo from "@/libs/mongoose";
+import Chatbot from "@/models/Chatbot";
+import { ChatbotCard } from "@/components/ChatbotCard";
 
 export const dynamic = "force-dynamic";
 
-// This is a private page: It's protected by the layout.js component which ensures the user is authenticated.
-// It's a server component which means you can fetch data (like the user profile) before the page is rendered.
-// See https://shipfa.st/docs/tutorials/private-page
 export default async function Dashboard() {
+  const session = await getServerSession(authOptions);
+  
+  if (!session || !session.user) {
+    return <div>Please log in to access the dashboard.</div>;
+  }
+
+  await connectMongo();
+  const chatbots = await Chatbot.find({ userId: session.user.id });
+
   return (
     <div className="flex flex-col min-h-screen">
       <SubscriptionBanner />
       <div className="flex flex-1">
-        <Sidebar /> {/* Use the Sidebar component here */}
+        <Sidebar />
         <main className="flex-1 p-8 pb-24">
           <section className="max-w-xl mx-auto space-y-8">
-            <h1 className="text-3xl md:text-4xl font-extrabold">Private Page</h1>
+            <h1 className="text-3xl md:text-4xl font-extrabold">Dashboard</h1>
           </section>
 
           <div className="flex justify-between items-center mb-8">
@@ -39,13 +48,8 @@ export default async function Dashboard() {
               </CardContent>
             </Card>
 
-            {/* Placeholder cards for other chatbots */}
-            {[...Array(7)].map((_, i) => (
-              <Card key={i} className="bg-gray-100">
-                <CardContent className="h-32 flex items-center justify-center">
-                  <div className="w-full h-4 bg-gray-200 rounded"></div>
-                </CardContent>
-              </Card>
+            {chatbots.map((chatbot) => (
+              <ChatbotCard key={chatbot._id.toString()} chatbot={chatbot} />
             ))}
           </div>
 

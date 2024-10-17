@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 
 const ChatbotSchema = new mongoose.Schema({
+  userId: {
+    type: String,
+    required: true,
+  },
   name: {
     type: String,
     required: true,
@@ -12,12 +16,7 @@ const ChatbotSchema = new mongoose.Schema({
   popupText: {
     type: String,
   },
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-  },
+  // Add any other fields you need for your chatbot
 }, { timestamps: true });
 
 export default mongoose.models.Chatbot || mongoose.model("Chatbot", ChatbotSchema);
-

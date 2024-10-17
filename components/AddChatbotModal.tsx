@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from 'react-hot-toast';
-import { Toaster } from 'react-hot-toast';
+
 
 export function AddChatbotModal() {
   const [name, setName] = useState('');
