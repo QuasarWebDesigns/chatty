@@ -3,6 +3,7 @@ import connectMongo from "@/libs/mongoose";
 import Chatbot from "@/models/chatbot";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/libs/next-auth";
+import { sendOpenAi } from '@/libs/gpt';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -97,5 +98,38 @@ export async function DELETE(req: NextRequest) {
   } catch (error) {
     console.error("Error deleting chatbot:", error);
     return NextResponse.json({ error: "Failed to delete chatbot" }, { status: 500 });
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  await connectMongo();
+
+  const { messages, chatbotId } = await req.json();
+
+  try {
+    // Verify that the chatbot belongs to the user
+    const chatbot = await Chatbot.findOne({ _id: chatbotId, userId: session.user.id });
+    if (!chatbot) {
+      return NextResponse.json({ error: "Chatbot not found or unauthorized" }, { status: 404 });
+    }
+
+    console.log("Sending messages to OpenAI:", messages);
+    const response = await sendOpenAi(messages, parseInt(chatbotId));
+    console.log("LLM Response:", response);
+
+    if (response) {
+      return NextResponse.json({ response });
+    } else {
+      console.log("Empty response from LLM");
+      return NextResponse.json({ error: 'Empty response from AI' }, { status: 500 });
+    }
+  } catch (error) {
+    console.error('Error in chat API:', error);
+    return NextResponse.json({ error: 'Failed to get response from AI', details: error.message }, { status: 500 });
   }
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from 'react-hot-toast';
+import { ChatInterface } from '@/components/ChatInterface';
 
 interface SerializedChatbot {
   id: string;
@@ -22,6 +23,7 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
   const [open, setOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [chatInterfaceOpen, setChatInterfaceOpen] = useState(false);
 
   const handleEmbedding = () => {
     toast.success('Embedding feature coming soon!');
@@ -75,7 +77,7 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
               <p><strong>Popup Text:</strong> {chatbot.popupText}</p>
             )}
             <div className="flex space-x-2">
-              <Button onClick={() => setOpen(false)}>Close</Button>
+              <Button onClick={() => setChatInterfaceOpen(true)}>Test Chatbot</Button>
               <Button onClick={handleEmbedding}>Embedding</Button>
               <Button variant="destructive" onClick={handleDeleteClick}>Delete</Button>
             </div>
@@ -105,6 +107,15 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDeleteConfirm}>Delete Chatbot</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={chatInterfaceOpen} onOpenChange={setChatInterfaceOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Chat with {chatbot.name}</DialogTitle>
+          </DialogHeader>
+          <ChatInterface chatbotId={chatbot.id} />
         </DialogContent>
       </Dialog>
     </>

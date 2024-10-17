@@ -1,55 +1,44 @@
-import axios from 'axios';
+import OpenAI from 'openai';
 
-// Use this if you want to make a call to OpenAI GPT-4 for instance. userId is used to identify the user on openAI side.
+const client = new OpenAI({
+  apiKey: process.env.TOGETHER_API_KEY,
+  baseURL: 'https://api.together.xyz/v1',
+});
+
 export const sendOpenAi = async (
-  messages: any[], // TODO: type this
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
   userId: number,
   max = 100,
   temp = 1
 ) => {
-  const url = 'https://api.openai.com/v1/chat/completions';
-
   console.log('Ask GPT >>>');
-  messages.map((m) =>
-    console.log(' - ' + m.role.toUpperCase() + ': ' + m.content)
+  messages.forEach((m) =>
+    console.log(` - ${m.role.toUpperCase()}: ${m.content}`)
   );
 
-  const body = JSON.stringify({
-    model: 'gpt-4',
-    messages,
-    max_tokens: max,
-    temperature: temp,
-    user: userId,
-  });
-
-  const options = {
-    headers: {
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-  };
-
   try {
-    const res = await axios.post(url, body, options);
+    const response = await client.chat.completions.create({
+      model: 'meta-llama/Llama-3-8b-chat-hf',
+      messages: messages,
+      max_tokens: max,
+      temperature: temp,
+      user: userId.toString(),
+    });
 
-    const answer = res.data.choices[0].message.content;
-    const usage = res?.data?.usage;
+    const answer = response.choices[0].message.content;
+    const usage = response.usage;
 
     console.log('>>> ' + answer);
-    console.log(
-      'TOKENS USED: ' +
-        usage?.total_tokens +
-        ' (prompt: ' +
-        usage?.prompt_tokens +
-        ' / response: ' +
-        usage?.completion_tokens +
-        ')'
-    );
+    if (usage) {
+      console.log(
+        `TOKENS USED: ${usage.total_tokens} (prompt: ${usage.prompt_tokens} / response: ${usage.completion_tokens})`
+      );
+    }
     console.log('\n');
 
     return answer;
-  } catch (e) {
-    console.error('GPT Error: ' + e?.response?.status, e?.response?.data);
-    return null;
+  } catch (error) {
+    console.error('GPT Error:', error);
+    throw new Error(`GPT Error: ${error.message}`);
   }
 };
