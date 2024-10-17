@@ -7,8 +7,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from 'react-hot-toast';
 
+interface AddChatbotModalProps {
+  onChatbotCreated: (newChatbot: any) => void;
+}
 
-export function AddChatbotModal() {
+export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
   const [name, setName] = useState('');
   const [automaticPopup, setAutomaticPopup] = useState(false);
   const [popupText, setPopupText] = useState('');
@@ -18,6 +21,7 @@ export function AddChatbotModal() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+
     try {
       const response = await fetch('/api/chatbot', {
         method: 'POST',
@@ -26,24 +30,19 @@ export function AddChatbotModal() {
         },
         body: JSON.stringify({ name, automaticPopup, popupText }),
       });
+
       if (response.ok) {
+        const newChatbot = await response.json();
+        onChatbotCreated(newChatbot);
         toast.success('Chatbot created successfully!');
-        // Close the modal after a short delay
-        setTimeout(() => {
-          setIsLoading(false);
-          setOpen(false);
-          // Reset form fields
-          setName('');
-          setAutomaticPopup(false);
-          setPopupText('');
-        }, 2000);
+        setOpen(false);
       } else {
         toast.error('Failed to create chatbot');
-        setIsLoading(false);
       }
     } catch (error) {
       console.error('Error creating chatbot:', error);
       toast.error('An error occurred while creating the chatbot');
+    } finally {
       setIsLoading(false);
     }
   };

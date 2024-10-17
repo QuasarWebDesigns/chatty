@@ -1,16 +1,15 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/libs/next-auth";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Plus, Play, ArrowRight } from "lucide-react";
+import { Play, ArrowRight } from "lucide-react";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import { Sidebar } from "@/components/Sidebar";
-import { AddChatbotModal } from "@/components/AddChatbotModal";
 import connectMongo from "@/libs/mongoose";
-import Chatbot from "@/models/Chatbot";
-import { ChatbotCard } from "@/components/ChatbotCard";
+import Chatbot from "@/models/chatbot";
+import { ChatbotList } from "@/components/ChatbotList";
+import { Card, CardContent } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 
@@ -41,17 +40,7 @@ export default async function Dashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-12">
-            <Card className="bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer">
-              <CardContent className="flex flex-col items-center justify-center h-full p-6">
-                <AddChatbotModal />
-              </CardContent>
-            </Card>
-
-            {chatbots.map((chatbot) => (
-              <ChatbotCard key={chatbot._id.toString()} chatbot={chatbot} />
-            ))}
-          </div>
+          <ChatbotList initialChatbots={chatbots} />
 
           <section>
             <h2 className="text-2xl font-semibold mb-4">Get started</h2>
