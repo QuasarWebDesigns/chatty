@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 import connectMongo from "@/libs/mongoose";
 import Chatbot from "@/models/chatbot";
+import Document from "@/models/document";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/libs/next-auth";
 import { sendOpenAi } from '@/libs/gpt';
@@ -10,6 +11,8 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const CHUNK_SIZE = 300; // Adjust this value based on your needs
+
 async function generateEmbedding(text: string) {
   const embedding = await openai.embeddings.create({
     model: "text-embedding-3-small",
@@ -17,6 +20,18 @@ async function generateEmbedding(text: string) {
     encoding_format: "float",
   });
   return embedding.data[0].embedding;
+}
+
+function chunkEmbedding(embedding: number[], chunkSize: number) {
+  const chunks = [];
+  for (let i = 0; i < embedding.length; i += chunkSize) {
+    chunks.push({
+      chunk: embedding.slice(i, i + chunkSize),
+      startIndex: i,
+      endIndex: Math.min(i + chunkSize, embedding.length),
+    });
+  }
+  return chunks;
 }
 
 export async function POST(req: NextRequest) {
@@ -45,14 +60,14 @@ export async function POST(req: NextRequest) {
       const content = buffer.toString('utf-8');
       console.log(`Generating embedding for document ${index + 1}: ${file.name}`);
       const embedding = await generateEmbedding(content);
-      console.log(`Embedding generated for ${file.name}. First 5 values:`, embedding.slice(0, 5));
+      const embeddingChunks = chunkEmbedding(embedding, CHUNK_SIZE);
+      console.log(`Embedding generated and chunked for ${file.name}. Chunks: ${embeddingChunks.length}`);
       return {
         name: file.name,
         content,
-        embedding,
+        embeddingChunks,
       };
     }));
-    console.log(`Processed ${processedDocuments.length} documents`);
 
     console.log("Creating chatbot...");
     const chatbot = await Chatbot.create({
@@ -60,26 +75,27 @@ export async function POST(req: NextRequest) {
       automaticPopup,
       popupText,
       userId: session.user.id,
-      documents: processedDocuments,
     });
-    console.log("Created chatbot:", chatbot.name);
 
-    if (!chatbot) {
-      throw new Error('Failed to create chatbot');
-    }
+    // Create documents and link them to the chatbot
+    const createdDocuments = await Promise.all(processedDocuments.map(async (doc) => {
+      const document = await Document.create({
+        name: doc.name,
+        content: doc.content,
+        embeddingChunks: doc.embeddingChunks,
+        chatbotId: chatbot._id,
+      });
+      return document._id;
+    }));
 
-    console.log("Serializing chatbot...");
+    // Update chatbot with document references
+    chatbot.documents = createdDocuments;
+    await chatbot.save();
+
+    console.log("Created chatbot with documents:", JSON.stringify(chatbot, null, 2));
+
     const serializedChatbot = chatbot.toJSON();
-    console.log("Serialized chatbot:", {
-      ...serializedChatbot,
-      documents: serializedChatbot.documents 
-        ? serializedChatbot.documents.map((doc: any) => ({
-            name: doc.name,
-            content: doc.content ? doc.content.substring(0, 100) + '...' : 'No content',
-            embeddingLength: doc.embedding ? doc.embedding.length : 'No embedding',
-          }))
-        : [],
-    });
+    console.log("Serialized chatbot:", JSON.stringify(serializedChatbot, null, 2));
 
     return NextResponse.json(serializedChatbot, { status: 201 });
   } catch (error) {

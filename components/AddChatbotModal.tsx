@@ -45,6 +45,8 @@ export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
       formData.append('documents', file);
     });
 
+    console.log("Form data:", Object.fromEntries(formData));
+
     try {
       const response = await axios.post('/api/chatbot', formData, {
         headers: {
