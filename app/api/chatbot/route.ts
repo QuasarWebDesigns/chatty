@@ -26,11 +26,21 @@ export async function POST(req: NextRequest) {
       userId: session.user.id,
     });
 
-    // Return the newly created chatbot
-    return NextResponse.json(chatbot);
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    // Serialize the chatbot data before sending it back
+    const serializedChatbot = {
+      id: chatbot._id.toString(),
+      name: chatbot.name,
+      automaticPopup: chatbot.automaticPopup,
+      popupText: chatbot.popupText,
+      userId: chatbot.userId.toString(),
+      createdAt: chatbot.createdAt.toISOString(),
+      updatedAt: chatbot.updatedAt.toISOString()
+    };
+
+    return NextResponse.json(serializedChatbot, { status: 201 });
+  } catch (error) {
+    console.error("Error creating chatbot:", error);
+    return NextResponse.json({ error: "Failed to create chatbot" }, { status: 500 });
   }
 }
 
@@ -55,8 +65,37 @@ export async function GET(req: NextRequest) {
     }));
 
     return NextResponse.json(serializedChatbots);
-  } catch (e) {
-    console.error(e);
+  } catch (error) {
+    console.error("Error fetching chatbots:", error);
     return NextResponse.json({ error: "Failed to fetch chatbots" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  await connectMongo();
+
+  const url = new URL(req.url);
+  const id = url.searchParams.get('id');
+
+  if (!id) {
+    return NextResponse.json({ error: "Chatbot ID is required" }, { status: 400 });
+  }
+
+  try {
+    const chatbot = await Chatbot.findOneAndDelete({ _id: id, userId: session.user.id });
+
+    if (!chatbot) {
+      return NextResponse.json({ error: "Chatbot not found or not authorized to delete" }, { status: 404 });
+    }
+
+    return NextResponse.json({ message: "Chatbot deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting chatbot:", error);
+    return NextResponse.json({ error: "Failed to delete chatbot" }, { status: 500 });
   }
 }

@@ -4,18 +4,46 @@ import { useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { toast } from 'react-hot-toast';
 
-interface ChatbotCardProps {
-  chatbot: {
-    _id: string;
-    name: string;
-    automaticPopup: boolean;
-    popupText?: string;
-  };
+interface SerializedChatbot {
+  id: string;
+  name: string;
+  automaticPopup: boolean;
+  popupText?: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export function ChatbotCard({ chatbot }: ChatbotCardProps) {
+export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot; onDelete: (id: string) => void }) {
   const [open, setOpen] = useState(false);
+
+  const handleEmbedding = () => {
+    // Implement embedding logic here
+    toast.success('Embedding feature coming soon!');
+  };
+
+  const handleDelete = async () => {
+    if (window.confirm('Are you sure you want to delete this chatbot?')) {
+      try {
+        const response = await fetch(`/api/chatbot?id=${chatbot.id}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          onDelete(chatbot.id);
+          toast.success('Chatbot deleted successfully');
+          setOpen(false);
+        } else {
+          throw new Error('Failed to delete chatbot');
+        }
+      } catch (error) {
+        console.error('Error deleting chatbot:', error);
+        toast.error('Failed to delete chatbot');
+      }
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -35,7 +63,11 @@ export function ChatbotCard({ chatbot }: ChatbotCardProps) {
           {chatbot.automaticPopup && chatbot.popupText && (
             <p><strong>Popup Text:</strong> {chatbot.popupText}</p>
           )}
-          <Button onClick={() => setOpen(false)}>Close</Button>
+          <div className="flex space-x-2">
+            <Button onClick={() => setOpen(false)}>Close</Button>
+            <Button onClick={handleEmbedding}>Embedding</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -23,6 +23,17 @@ export default async function Dashboard() {
   await connectMongo();
   const chatbots = await Chatbot.find({ userId: session.user.id });
 
+  // Serialize the chatbot data
+  const serializedChatbots = chatbots.map(chatbot => ({
+    id: chatbot._id.toString(),
+    name: chatbot.name,
+    automaticPopup: chatbot.automaticPopup,
+    popupText: chatbot.popupText,
+    userId: chatbot.userId.toString(),
+    createdAt: chatbot.createdAt.toISOString(),
+    updatedAt: chatbot.updatedAt.toISOString()
+  }));
+
   return (
     <div className="flex flex-col min-h-screen">
       <SubscriptionBanner />
@@ -40,7 +51,7 @@ export default async function Dashboard() {
             </div>
           </div>
 
-          <ChatbotList initialChatbots={chatbots} />
+          <ChatbotList initialChatbots={serializedChatbots} />
 
           <section>
             <h2 className="text-2xl font-semibold mb-4">Get started</h2>

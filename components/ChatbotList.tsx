@@ -1,22 +1,29 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { AddChatbotModal } from "@/components/AddChatbotModal";
 import { ChatbotCard } from "@/components/ChatbotCard";
 
-interface Chatbot {
-  _id: string;
+interface SerializedChatbot {
+  id: string;
   name: string;
   automaticPopup: boolean;
   popupText?: string;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export function ChatbotList({ initialChatbots }: { initialChatbots: Chatbot[] }) {
-  const [chatbots, setChatbots] = useState<Chatbot[]>(initialChatbots);
+export function ChatbotList({ initialChatbots }: { initialChatbots: SerializedChatbot[] }) {
+  const [chatbots, setChatbots] = useState<SerializedChatbot[]>(initialChatbots);
 
-  const addChatbot = (newChatbot: Chatbot) => {
+  const addChatbot = (newChatbot: SerializedChatbot) => {
     setChatbots(prevChatbots => [...prevChatbots, newChatbot]);
+  };
+
+  const deleteChatbot = (id: string) => {
+    setChatbots(prevChatbots => prevChatbots.filter(chatbot => chatbot.id !== id));
   };
 
   return (
@@ -28,7 +35,7 @@ export function ChatbotList({ initialChatbots }: { initialChatbots: Chatbot[] })
       </Card>
 
       {chatbots.map((chatbot) => (
-        <ChatbotCard key={chatbot._id.toString()} chatbot={chatbot} />
+        <ChatbotCard key={chatbot.id} chatbot={chatbot} onDelete={deleteChatbot} />
       ))}
     </div>
   );
