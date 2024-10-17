@@ -4,6 +4,20 @@ import Chatbot from "@/models/chatbot";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/libs/next-auth";
 import { sendOpenAi } from '@/libs/gpt';
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+async function generateEmbedding(text: string) {
+  const embedding = await openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: text,
+    encoding_format: "float",
+  });
+  return embedding.data[0].embedding;
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -13,35 +27,64 @@ export async function POST(req: NextRequest) {
 
   await connectMongo();
 
-  const body = await req.json();
+  const formData = await req.formData();
+  const name = formData.get('name') as string;
+  const automaticPopup = formData.get('automaticPopup') === 'true';
+  const popupText = formData.get('popupText') as string;
+  const documents = formData.getAll('documents') as File[];
 
-  if (!body.name) {
-    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  if (!name || documents.length === 0) {
+    return NextResponse.json({ error: "Name and documents are required" }, { status: 400 });
   }
 
   try {
-    const chatbot = await Chatbot.create({
-      name: body.name,
-      automaticPopup: body.automaticPopup,
-      popupText: body.popupText,
-      userId: session.user.id,
-    });
+    console.log("Processing documents...");
+    const processedDocuments = await Promise.all(documents.map(async (file, index) => {
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const content = buffer.toString('utf-8');
+      console.log(`Generating embedding for document ${index + 1}: ${file.name}`);
+      const embedding = await generateEmbedding(content);
+      console.log(`Embedding generated for ${file.name}. First 5 values:`, embedding.slice(0, 5));
+      return {
+        name: file.name,
+        content,
+        embedding,
+      };
+    }));
+    console.log(`Processed ${processedDocuments.length} documents`);
 
-    // Serialize the chatbot data before sending it back
-    const serializedChatbot = {
-      id: chatbot._id.toString(),
-      name: chatbot.name,
-      automaticPopup: chatbot.automaticPopup,
-      popupText: chatbot.popupText,
-      userId: chatbot.userId.toString(),
-      createdAt: chatbot.createdAt.toISOString(),
-      updatedAt: chatbot.updatedAt.toISOString()
-    };
+    console.log("Creating chatbot...");
+    const chatbot = await Chatbot.create({
+      name,
+      automaticPopup,
+      popupText,
+      userId: session.user.id,
+      documents: processedDocuments,
+    });
+    console.log("Created chatbot:", chatbot.name);
+
+    if (!chatbot) {
+      throw new Error('Failed to create chatbot');
+    }
+
+    console.log("Serializing chatbot...");
+    const serializedChatbot = chatbot.toJSON();
+    console.log("Serialized chatbot:", {
+      ...serializedChatbot,
+      documents: serializedChatbot.documents 
+        ? serializedChatbot.documents.map((doc: any) => ({
+            name: doc.name,
+            content: doc.content ? doc.content.substring(0, 100) + '...' : 'No content',
+            embeddingLength: doc.embedding ? doc.embedding.length : 'No embedding',
+          }))
+        : [],
+    });
 
     return NextResponse.json(serializedChatbot, { status: 201 });
   } catch (error) {
     console.error("Error creating chatbot:", error);
-    return NextResponse.json({ error: "Failed to create chatbot" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create chatbot", details: error.message }, { status: 500 });
   }
 }
 
