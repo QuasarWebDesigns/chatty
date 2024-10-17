@@ -12,10 +12,10 @@ const sidebarItems = [
 
 export function Sidebar() {
   return (
-    <div className="pb-12 w-64">
+    <div className="pb-12 w-64 bg-blue-50">
       <div className="space-y-4 py-4">
         <div className="px-3 py-2">
-          <h2 className="mb-2 px-4 text-lg font-semibold tracking-tight">
+          <h2 className="mb-2 px-4 text-lg font-semibold tracking-tight text-blue-800">
             Menu
           </h2>
           <ButtonAccount />
@@ -24,7 +24,7 @@ export function Sidebar() {
               <Button
                 key={item.name}
                 variant="ghost"
-                className="w-full justify-start"
+                className="w-full justify-start text-blue-600 hover:bg-blue-100 hover:text-blue-800"
                 asChild
               >
                 <Link href={item.href}>

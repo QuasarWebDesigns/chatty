@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Plus, Play, ArrowRight } from "lucide-react";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import { Sidebar } from "@/components/Sidebar"; // Import the Sidebar component
+import { AddChatbotModal } from "@/components/AddChatbotModal";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +35,7 @@ export default async function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-12">
             <Card className="bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer">
               <CardContent className="flex flex-col items-center justify-center h-full p-6">
-                <Plus size={24} className="mb-2" />
-                <p className="text-center">Add chatbot</p>
+                <AddChatbotModal />
               </CardContent>
             </Card>
 
