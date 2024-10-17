@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 const EmbeddingChunkSchema = new mongoose.Schema({
-  chunk: [Number],
+  embedding: [Number],
   startIndex: Number,
   endIndex: Number,
 });
@@ -11,7 +11,6 @@ const DocumentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  content: String,
   embeddingChunks: [EmbeddingChunkSchema],
   chatbotId: {
     type: mongoose.Schema.Types.ObjectId,

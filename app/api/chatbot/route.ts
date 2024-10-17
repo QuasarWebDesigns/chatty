@@ -4,14 +4,15 @@ import Chatbot from "@/models/chatbot";
 import Document from "@/models/document";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/libs/next-auth";
-import { sendOpenAi } from '@/libs/gpt';
 import OpenAI from "openai";
+import { sendOpenAi } from '@/libs/gpt';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const CHUNK_SIZE = 300; // Adjust this value based on your needs
+const CHUNK_SIZE = 1000; // Adjust based on your needs
+const CHUNK_OVERLAP = 200; // Overlap between chunks to maintain context
 
 async function generateEmbedding(text: string) {
   const embedding = await openai.embeddings.create({
@@ -22,47 +23,54 @@ async function generateEmbedding(text: string) {
   return embedding.data[0].embedding;
 }
 
-function chunkEmbedding(embedding: number[], chunkSize: number) {
-  return embedding.reduce((chunks, _, i) => {
-    if (i % chunkSize === 0) {
-      chunks.push({
-        chunk: embedding.slice(i, i + chunkSize),
-        startIndex: i,
-        endIndex: Math.min(i + chunkSize, embedding.length),
-      });
-    }
-    return chunks;
-  }, []);
+function chunkText(text: string, chunkSize: number, overlap: number) {
+  const chunks = [];
+  let startIndex = 0;
+
+  while (startIndex < text.length) {
+    const endIndex = Math.min(startIndex + chunkSize, text.length);
+    chunks.push({
+      text: text.slice(startIndex, endIndex),
+      startIndex,
+      endIndex
+    });
+    startIndex += chunkSize - overlap;
+  }
+
+  return chunks;
 }
 
 async function processDocument(file: File) {
   const content = await file.text();
-  const embedding = await generateEmbedding(content);
-  const embeddingChunks = chunkEmbedding(embedding, CHUNK_SIZE);
-  return { name: file.name, content, embeddingChunks };
+  const chunks = chunkText(content, CHUNK_SIZE, CHUNK_OVERLAP);
+  const embeddingChunks = await Promise.all(chunks.map(async (chunk) => {
+    const embedding = await generateEmbedding(chunk.text);
+    return {
+      embedding,
+      startIndex: chunk.startIndex,
+      endIndex: chunk.endIndex,
+    };
+  }));
+  return { name: file.name, embeddingChunks };
 }
 
 async function createChatbotWithDocuments(name: string, automaticPopup: boolean, popupText: string, userId: string, processedDocuments: any[]) {
   const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId });
   const createdDocuments = await Promise.all(processedDocuments.map(doc => 
-    Document.create({ ...doc, chatbotId: chatbot._id })
+    Document.create({ name: doc.name, embeddingChunks: doc.embeddingChunks, chatbotId: chatbot._id })
   ));
   chatbot.documents = createdDocuments.map(doc => doc._id);
   await chatbot.save();
   return chatbot;
 }
 
-async function authenticateRequest(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
-    throw new Error("Unauthorized");
-  }
-  return session.user;
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const user = await authenticateRequest(req);
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     await connectMongo();
 
     const formData = await req.formData();
@@ -75,8 +83,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Name and documents are required" }, { status: 400 });
     }
 
+    console.log("Processing documents...");
     const processedDocuments = await Promise.all(documents.map(processDocument));
-    const chatbot = await createChatbotWithDocuments(name, automaticPopup, popupText, user.id, processedDocuments);
+    console.log(`Processed ${processedDocuments.length} documents`);
+
+    const chatbot = await createChatbotWithDocuments(name, automaticPopup, popupText, session.user.id, processedDocuments);
+    console.log("Created chatbot with documents:", chatbot._id);
 
     return NextResponse.json(chatbot.toJSON(), { status: 201 });
   } catch (error) {
@@ -87,10 +99,14 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await authenticateRequest(req);
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     await connectMongo();
 
-    const chatbots = await Chatbot.find({ userId: user.id });
+    const chatbots = await Chatbot.find({ userId: session.user.id });
     const serializedChatbots = chatbots.map(chatbot => ({
       id: chatbot._id.toString(),
       name: chatbot.name,
@@ -110,7 +126,11 @@ export async function GET(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const user = await authenticateRequest(req);
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     await connectMongo();
 
     const url = new URL(req.url);
@@ -120,7 +140,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Chatbot ID is required" }, { status: 400 });
     }
 
-    const chatbot = await Chatbot.findOneAndDelete({ _id: id, userId: user.id });
+    const chatbot = await Chatbot.findOneAndDelete({ _id: id, userId: session.user.id });
 
     if (!chatbot) {
       return NextResponse.json({ error: "Chatbot not found or not authorized to delete" }, { status: 404 });
@@ -135,12 +155,16 @@ export async function DELETE(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
-    const user = await authenticateRequest(req);
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     await connectMongo();
 
     const { messages, chatbotId } = await req.json();
 
-    const chatbot = await Chatbot.findOne({ _id: chatbotId, userId: user.id });
+    const chatbot = await Chatbot.findOne({ _id: chatbotId, userId: session.user.id });
     if (!chatbot) {
       return NextResponse.json({ error: "Chatbot not found or unauthorized" }, { status: 404 });
     }
