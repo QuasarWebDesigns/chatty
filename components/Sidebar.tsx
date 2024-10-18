@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Button } from "@/components/ui/button"
+import { cn } from "@/libs/tailwind"
 import { Home, Settings, HelpCircle } from 'lucide-react'
 import ButtonAccount from "@/components/ButtonAccount";
 
