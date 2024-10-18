@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from 'react-hot-toast';
 import axios from 'axios';
+import { X } from 'lucide-react'; // Import the X icon from lucide-react
 
 interface AddChatbotModalProps {
   onChatbotCreated: (newChatbot: any) => void;
@@ -23,9 +24,13 @@ export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const files = Array.from(e.target.files);
-      setSelectedFiles(files);
+      const newFiles = Array.from(e.target.files);
+      setSelectedFiles(prevFiles => [...prevFiles, ...newFiles]);
     }
+  };
+
+  const removeFile = (fileToRemove: File) => {
+    setSelectedFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,8 +49,6 @@ export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
     selectedFiles.forEach((file) => {
       formData.append('documents', file);
     });
-
-    console.log("Form data:", Object.fromEntries(formData));
 
     try {
       const response = await axios.post('/api/chatbot', formData, {
@@ -113,13 +116,25 @@ export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
               disabled={isLoading}
               accept=".pdf,.doc,.docx,.txt"
               multiple
-              required
               ref={fileInputRef}
             />
             {selectedFiles.length > 0 && (
-              <p className="text-sm text-gray-500">
-                {selectedFiles.length} file(s) selected
-              </p>
+              <div className="mt-2 space-y-1">
+                {selectedFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between bg-gray-100 p-2 rounded">
+                    <span className="text-sm truncate">{file.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeFile(file)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <X size={16} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
           <div className="flex items-center space-x-2">
@@ -143,7 +158,7 @@ export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
               />
             </div>
           )}
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading || selectedFiles.length === 0}>
             {isLoading ? (
               <>
                 <span className="loading loading-spinner loading-sm mr-2"></span>

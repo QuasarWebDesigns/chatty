@@ -43,14 +43,15 @@ function chunkText(text: string, chunkSize: number, overlap: number) {
 async function processDocument(file: File) {
   const content = await file.text();
   const chunks = chunkText(content, CHUNK_SIZE, CHUNK_OVERLAP);
-  const embeddingChunks = await Promise.all(chunks.map(async (chunk) => {
+  const embeddingChunks = [];
+  for (const chunk of chunks) {
     const embedding = await generateEmbedding(chunk.text);
-    return {
+    embeddingChunks.push({
       embedding,
       startIndex: chunk.startIndex,
       endIndex: chunk.endIndex,
-    };
-  }));
+    });
+  }
   return { name: file.name, embeddingChunks };
 }
 
@@ -65,30 +66,51 @@ async function createChatbotWithDocuments(name: string, automaticPopup: boolean,
 }
 
 export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  await connectMongo();
+
+  const formData = await req.formData();
+  const name = formData.get('name') as string;
+  const automaticPopup = formData.get('automaticPopup') === 'true';
+  const popupText = formData.get('popupText') as string;
+  const documents = formData.getAll('documents') as File[];
+
+  if (!name || documents.length === 0) {
+    return NextResponse.json({ error: "Name and documents are required" }, { status: 400 });
+  }
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId: session.user.id });
+
+    console.log(`Processing ${documents.length} documents for chatbot: ${name}`);
+
+    const processedDocuments = [];
+    for (let i = 0; i < documents.length; i++) {
+      const file = documents[i];
+      console.log(`Processing document ${i + 1}/${documents.length}: ${file.name}`);
+      
+      const processedDoc = await processDocument(file);
+      console.log(`Generating embeddings for ${file.name}`);
+      
+      const createdDoc = await Document.create({ 
+        name: processedDoc.name, 
+        embeddingChunks: processedDoc.embeddingChunks, 
+        chatbotId: chatbot._id 
+      });
+      processedDocuments.push(createdDoc._id);
+      
+      console.log(`Finished processing ${file.name}`);
+      console.log(`Progress: ${Math.round(((i + 1) / documents.length) * 100)}%`);
     }
 
-    await connectMongo();
+    chatbot.documents = processedDocuments;
+    await chatbot.save();
 
-    const formData = await req.formData();
-    const name = formData.get('name') as string;
-    const automaticPopup = formData.get('automaticPopup') === 'true';
-    const popupText = formData.get('popupText') as string;
-    const documents = formData.getAll('documents') as File[];
-
-    if (!name || documents.length === 0) {
-      return NextResponse.json({ error: "Name and documents are required" }, { status: 400 });
-    }
-
-    console.log("Processing documents...");
-    const processedDocuments = await Promise.all(documents.map(processDocument));
-    console.log(`Processed ${processedDocuments.length} documents`);
-
-    const chatbot = await createChatbotWithDocuments(name, automaticPopup, popupText, session.user.id, processedDocuments);
-    console.log("Created chatbot with documents:", chatbot._id);
+    console.log(`Finished processing all documents for chatbot: ${name}`);
 
     return NextResponse.json(chatbot.toJSON(), { status: 201 });
   } catch (error) {
@@ -140,16 +162,23 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Chatbot ID is required" }, { status: 400 });
     }
 
-    const chatbot = await Chatbot.findOneAndDelete({ _id: id, userId: session.user.id });
+    // Find the chatbot
+    const chatbot = await Chatbot.findOne({ _id: id, userId: session.user.id });
 
     if (!chatbot) {
       return NextResponse.json({ error: "Chatbot not found or not authorized to delete" }, { status: 404 });
     }
 
-    return NextResponse.json({ message: "Chatbot deleted successfully" });
+    // Delete all associated documents and their embeddings
+    await Document.deleteMany({ chatbotId: chatbot._id });
+
+    // Delete the chatbot
+    await Chatbot.findByIdAndDelete(chatbot._id);
+
+    return NextResponse.json({ message: "Chatbot and associated documents deleted successfully" });
   } catch (error) {
     console.error("Error deleting chatbot:", error);
-    return NextResponse.json({ error: "Failed to delete chatbot" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete chatbot", details: error.message }, { status: 500 });
   }
 }
 
