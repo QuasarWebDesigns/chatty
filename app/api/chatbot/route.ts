@@ -84,6 +84,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Check if a chatbot with the same name already exists for this user
+    const existingChatbot = await Chatbot.findOne({ name, userId: session.user.id });
+    if (existingChatbot) {
+      return NextResponse.json({ error: "A chatbot with this name already exists" }, { status: 409 });
+    }
+
     const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId: session.user.id });
 
     console.log(`Processing ${documents.length} documents for chatbot: ${name}`);

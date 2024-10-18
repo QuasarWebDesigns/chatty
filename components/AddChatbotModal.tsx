@@ -64,11 +64,15 @@ export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
         setOpen(false);
         resetForm();
       } else {
-        toast.error('Failed to create chatbot');
+        throw new Error('Failed to create chatbot');
       }
     } catch (error) {
       console.error('Error creating chatbot:', error);
-      toast.error('An error occurred while creating the chatbot');
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        toast.error('A chatbot with this name already exists. Please choose a different name.');
+      } else {
+        toast.error('An error occurred while creating the chatbot');
+      }
     } finally {
       setIsLoading(false);
     }
