@@ -1,17 +1,14 @@
 import mongoose from "mongoose";
 
-const EmbeddingChunkSchema = new mongoose.Schema({
-  embedding: [Number],
-  startIndex: Number,
-  endIndex: Number,
-});
-
 const DocumentSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true
   },
-  embeddingChunks: [EmbeddingChunkSchema],
+  chunkCount: {
+    type: Number,
+    required: true
+  },
   chatbotId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Chatbot',

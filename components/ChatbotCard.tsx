@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from 'react-hot-toast';
 import { ChatInterface } from '@/components/ChatInterface';
+import { Settings } from 'lucide-react'; // Import the Settings icon
 
 interface SerializedChatbot {
   id: string;
@@ -24,9 +25,14 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [chatInterfaceOpen, setChatInterfaceOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   const handleEmbedding = () => {
     toast.success('Embedding feature coming soon!');
+  };
+
+  const handleSettings = () => {
+    setSettingsDialogOpen(true);
   };
 
   const handleDeleteClick = () => {
@@ -76,9 +82,13 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
             {chatbot.automaticPopup && chatbot.popupText && (
               <p><strong>Popup Text:</strong> {chatbot.popupText}</p>
             )}
-            <div className="flex space-x-2">
+            <div className="flex flex-wrap gap-2">
               <Button onClick={() => setChatInterfaceOpen(true)}>Test Chatbot</Button>
               <Button onClick={handleEmbedding}>Embedding</Button>
+              <Button onClick={handleSettings}>
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </Button>
               <Button variant="destructive" onClick={handleDeleteClick}>Delete</Button>
             </div>
           </div>
@@ -116,6 +126,21 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
             <DialogTitle>Chat with {chatbot.name}</DialogTitle>
           </DialogHeader>
           <ChatInterface chatbotId={chatbot.id} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Settings for {chatbot.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Add settings fields here */}
+            <p>Chatbot settings coming soon!</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSettingsDialogOpen(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

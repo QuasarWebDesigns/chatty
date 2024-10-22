@@ -4,68 +4,12 @@ import Chatbot from "@/models/chatbot";
 import Document from "@/models/document";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/libs/next-auth";
-import OpenAI from "openai";
 import { sendOpenAi } from '@/libs/gpt';
+import { processDocument, createChatbotWithDocuments, searchEmbeddings } from '@/libs/chatbotProcessing';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const CHUNK_SIZE = 1000; // Adjust based on your needs
-const CHUNK_OVERLAP = 200; // Overlap between chunks to maintain context
-
-async function generateEmbedding(text: string) {
-  const embedding = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: text,
-    encoding_format: "float",
-  });
-  return embedding.data[0].embedding;
-}
-
-function chunkText(text: string, chunkSize: number, overlap: number) {
-  const chunks = [];
-  let startIndex = 0;
-
-  while (startIndex < text.length) {
-    const endIndex = Math.min(startIndex + chunkSize, text.length);
-    chunks.push({
-      text: text.slice(startIndex, endIndex),
-      startIndex,
-      endIndex
-    });
-    startIndex += chunkSize - overlap;
-  }
-
-  return chunks;
-}
-
-async function processDocument(file: File) {
-  const content = await file.text();
-  const chunks = chunkText(content, CHUNK_SIZE, CHUNK_OVERLAP);
-  const embeddingChunks = [];
-  for (const chunk of chunks) {
-    const embedding = await generateEmbedding(chunk.text);
-    embeddingChunks.push({
-      embedding,
-      startIndex: chunk.startIndex,
-      endIndex: chunk.endIndex,
-    });
-  }
-  return { name: file.name, embeddingChunks };
-}
-
-async function createChatbotWithDocuments(name: string, automaticPopup: boolean, popupText: string, userId: string, processedDocuments: any[]) {
-  const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId });
-  const createdDocuments = await Promise.all(processedDocuments.map(doc => 
-    Document.create({ name: doc.name, embeddingChunks: doc.embeddingChunks, chatbotId: chatbot._id })
-  ));
-  chatbot.documents = createdDocuments.map(doc => doc._id);
-  await chatbot.save();
-  return chatbot;
-}
-
+// POST route to create a new chatbot
 export async function POST(req: NextRequest) {
+  // Authenticate user
   const session = await getServerSession(authOptions);
   if (!session || !session.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -84,37 +28,31 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Check if a chatbot with the same name already exists for this user
+    // Check for existing chatbot with the same name
     const existingChatbot = await Chatbot.findOne({ name, userId: session.user.id });
     if (existingChatbot) {
       return NextResponse.json({ error: "A chatbot with this name already exists" }, { status: 409 });
     }
 
-    const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId: session.user.id });
-
     console.log(`Processing ${documents.length} documents for chatbot: ${name}`);
 
+    // Process each document
     const processedDocuments = [];
     for (let i = 0; i < documents.length; i++) {
       const file = documents[i];
       console.log(`Processing document ${i + 1}/${documents.length}: ${file.name}`);
       
-      const processedDoc = await processDocument(file);
-      console.log(`Generating embeddings for ${file.name}`);
+      const processedDoc = await processDocument(file, session.user.id);
+      console.log(`Generated embeddings for ${file.name}`);
       
-      const createdDoc = await Document.create({ 
-        name: processedDoc.name, 
-        embeddingChunks: processedDoc.embeddingChunks, 
-        chatbotId: chatbot._id 
-      });
-      processedDocuments.push(createdDoc._id);
+      processedDocuments.push(processedDoc);
       
       console.log(`Finished processing ${file.name}`);
       console.log(`Progress: ${Math.round(((i + 1) / documents.length) * 100)}%`);
     }
 
-    chatbot.documents = processedDocuments;
-    await chatbot.save();
+    // Create chatbot with processed documents
+    const chatbot = await createChatbotWithDocuments(name, automaticPopup, popupText, session.user.id, processedDocuments);
 
     console.log(`Finished processing all documents for chatbot: ${name}`);
 
@@ -125,6 +63,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// GET route to fetch all chatbots for a user
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -152,6 +91,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// DELETE route to remove a chatbot and its associated documents
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -188,6 +128,7 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
+// PUT route to handle chat interactions
 export async function PUT(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -204,7 +145,18 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Chatbot not found or unauthorized" }, { status: 404 });
     }
 
-    const response = await sendOpenAi(messages, parseInt(chatbotId));
+    // Get the last user message
+    const lastUserMessage = messages[messages.length - 1].content;
+
+    console.log(`Searching embeddings for chatbot ${chatbotId} with query: "${lastUserMessage}"`);
+
+    // Search for relevant embeddings
+    const { context } = await searchEmbeddings(lastUserMessage, chatbotId);
+
+    console.log('Context retrieved:', context);
+
+    // Send to OpenAI with context
+    const response = await sendOpenAi(messages, parseInt(chatbotId), context);
 
     if (response) {
       return NextResponse.json({ response });
