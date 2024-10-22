@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from 'react-hot-toast';
 import { ChatInterface } from '@/components/ChatInterface';
 import { Settings } from 'lucide-react'; // Import the Settings icon
+import { EmbeddingModal } from '@/components/EmbeddingModal';
 
 interface SerializedChatbot {
   id: string;
@@ -26,9 +27,10 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [chatInterfaceOpen, setChatInterfaceOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [embeddingModalOpen, setEmbeddingModalOpen] = useState(false);
 
   const handleEmbedding = () => {
-    toast.success('Embedding feature coming soon!');
+    setEmbeddingModalOpen(true);
   };
 
   const handleSettings = () => {
@@ -39,25 +41,11 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = async () => {
-    if (deleteConfirmation.toLowerCase() === chatbot.name.toLowerCase()) {
-      try {
-        const response = await fetch(`/api/chatbot?id=${chatbot.id}`, {
-          method: 'DELETE',
-        });
-
-        if (response.ok) {
-          onDelete(chatbot.id);
-          toast.success('Chatbot deleted successfully');
-          setOpen(false);
-          setDeleteDialogOpen(false);
-        } else {
-          throw new Error('Failed to delete chatbot');
-        }
-      } catch (error) {
-        console.error('Error deleting chatbot:', error);
-        toast.error('Failed to delete chatbot');
-      }
+  const handleDeleteConfirm = () => {
+    if (deleteConfirmation === chatbot.name) {
+      onDelete(chatbot.id);
+      setDeleteDialogOpen(false);
+      setDeleteConfirmation('');
     } else {
       toast.error('Chatbot name does not match. Deletion cancelled.');
     }
@@ -73,7 +61,7 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
             </CardContent>
           </Card>
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{chatbot.name}</DialogTitle>
           </DialogHeader>
@@ -96,26 +84,20 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
       </Dialog>
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Chatbot</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <p>Deleting this chatbot will permanently remove all its data. This action cannot be undone.</p>
-            <p>To confirm, please type the name of the chatbot: <strong>{chatbot.name}</strong></p>
-            <div className="space-y-2">
-              <Label htmlFor="deleteConfirmation">Chatbot Name</Label>
-              <Input
-                id="deleteConfirmation"
-                value={deleteConfirmation}
-                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                placeholder="Enter chatbot name to confirm"
-              />
-            </div>
-          </div>
+          <p>Are you sure you want to delete this chatbot? This action cannot be undone.</p>
+          <p>Type the chatbot name <strong>{chatbot.name}</strong> to confirm:</p>
+          <Input
+            value={deleteConfirmation}
+            onChange={(e) => setDeleteConfirmation(e.target.value)}
+            placeholder="Type chatbot name here"
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>Delete Chatbot</Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -143,6 +125,13 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EmbeddingModal
+        isOpen={embeddingModalOpen}
+        onClose={() => setEmbeddingModalOpen(false)}
+        chatbotId={chatbot.id}
+        chatbotName={chatbot.name}
+      />
     </>
   );
 }
