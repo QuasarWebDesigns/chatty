@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import Script from 'next/script';
 import config from "@/config";
 import logo from "@/app/icon.png";
 
@@ -10,13 +11,14 @@ const Footer = () => {
   return (
     <footer className="bg-base-200 border-t border-base-content/10">
       <div className="max-w-7xl mx-auto px-8 py-24">
-        <div className=" flex lg:items-start md:flex-row md:flex-nowrap flex-wrap flex-col">
+        <div className="flex lg:items-start md:flex-row md:flex-nowrap flex-wrap flex-col">
           <div className="w-64 flex-shrink-0 md:mx-0 mx-auto text-center md:text-left">
             <Link
               href="/#"
               aria-current="page"
               className="flex gap-2 justify-center md:justify-start items-center"
             >
+              
               <Image
                 src={logo}
                 alt={`${config.appName} logo`}
@@ -25,6 +27,8 @@ const Footer = () => {
                 width={24}
                 height={24}
               />
+              
+              
               <strong className="font-extrabold tracking-tight text-base md:text-lg">
                 {config.appName}
               </strong>
@@ -82,6 +86,20 @@ const Footer = () => {
             </div>
           </div>
         </div>
+        {/* Add the chatbot scripts */}
+        <Script id="chatbot-config" strategy="afterInteractive">
+          {`
+            window.embeddedChatbotConfig = {
+              chatbotId: "67146c3b4d62728a62975754",
+              domain: "http://localhost:3000"
+            }
+          `}
+        </Script>
+        <Script
+          src="http://localhost:3000/embed.min.js"
+          strategy="afterInteractive"
+          defer
+        />
       </div>
     </footer>
   );

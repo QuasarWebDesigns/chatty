@@ -26,7 +26,7 @@ export default function ChatbotPreview({ chatbotId, chatbotName }: { chatbotId: 
   const handleSend = async () => {
     if (input.trim() && !isLoading) {
       setIsLoading(true)
-      const newMessages = [...messages, { role: 'user', content: input }]
+      const newMessages: Message[] = [...messages, { role: 'user', content: input }]
       setMessages(newMessages)
       setInput('')
 
