@@ -1,3 +1,4 @@
+"use client";
 import Link from "next/link";
 import Image from "next/image";
 import Script from 'next/script';
@@ -96,7 +97,7 @@ const Footer = () => {
           `}
         </Script>
         <Script
-          src="http://localhost:3000/embed.min.js"
+          src="http://localhost:3000/embeded.min.js"
           strategy="afterInteractive"
           defer
         />
