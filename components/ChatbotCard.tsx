@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import { ChatInterface } from '@/components/ChatInterface';
 import { Settings } from 'lucide-react'; // Import the Settings icon
 import { EmbeddingModal } from '@/components/EmbeddingModal';
+import apiClient from '@/libs/api';
 
 interface SerializedChatbot {
   id: string;
@@ -41,11 +42,23 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (deleteConfirmation === chatbot.name) {
-      onDelete(chatbot.id);
-      setDeleteDialogOpen(false);
-      setDeleteConfirmation('');
+      try {
+        // First, delete the embeddings from Pinecone
+        await apiClient.delete(`/chatbot/${chatbot.id}/embeddings`);
+        
+        // Then, delete the chatbot from MongoDB
+        await apiClient.delete(`/chatbot/${chatbot.id}`);
+        
+        onDelete(chatbot.id);
+        setDeleteDialogOpen(false);
+        setDeleteConfirmation('');
+        toast.success('Chatbot deleted successfully');
+      } catch (error) {
+        console.error('Error deleting chatbot:', error);
+        toast.error('Failed to delete chatbot. Please try again.');
+      }
     } else {
       toast.error('Chatbot name does not match. Deletion cancelled.');
     }
