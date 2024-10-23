@@ -42,7 +42,7 @@ function chunkText(text: string, chunkSize: number, overlap: number) {
   return chunks;
 }
 
-export async function processDocument(file: File, chatbotId: string) {
+export async function processDocument(file: File, chatbotId: string, chatbotName: string) {
   const content = await file.text();
   const chunks = chunkText(content, CHUNK_SIZE, CHUNK_OVERLAP);
   const index = await initPinecone();
@@ -64,7 +64,9 @@ export async function processDocument(file: File, chatbotId: string) {
     });
   }
 
-  await index.upsert(vectors);
+  // Use chatbotName and chatbotId as the namespace
+  const namespace = `${chatbotName}-${chatbotId}`;
+  await index.namespace(namespace).upsert(vectors);
 
   return { name: file.name, chunkCount: chunks.length };
 }
@@ -84,9 +86,17 @@ export async function searchEmbeddings(inputQuery: string, chatbotId: string, re
     console.log(`Searching embeddings for query: "${inputQuery}" and chatbotId: ${chatbotId}`);
     const index = await initPinecone();
 
+    // Fetch the chatbot to get its name
+    const chatbot = await Chatbot.findById(chatbotId);
+    if (!chatbot) {
+      throw new Error(`Chatbot with id ${chatbotId} not found`);
+    }
+
     const queryVector = await generateEmbedding(inputQuery);
 
-    const queryResponse = await index.query({
+    // Use chatbotName and chatbotId as the namespace
+    const namespace = `${chatbot.name}-${chatbotId}`;
+    const queryResponse = await index.namespace(namespace).query({
       vector: queryVector,
       topK: resultNum,
       includeMetadata: true,

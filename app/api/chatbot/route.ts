@@ -28,13 +28,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Check for existing chatbot with the same name
-    const existingChatbot = await Chatbot.findOne({ name, userId: session.user.id });
-    if (existingChatbot) {
-      return NextResponse.json({ error: "A chatbot with this name already exists" }, { status: 409 });
-    }
-
-    console.log(`Processing ${documents.length} documents for chatbot: ${name}`);
+    // Create chatbot first to get the ID
+    const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId: session.user.id });
 
     // Process each document
     const processedDocuments = [];
@@ -42,7 +37,8 @@ export async function POST(req: NextRequest) {
       const file = documents[i];
       console.log(`Processing document ${i + 1}/${documents.length}: ${file.name}`);
       
-      const processedDoc = await processDocument(file, session.user.id);
+      // Pass the chatbot name and ID to the processDocument function
+      const processedDoc = await processDocument(file, chatbot._id.toString(), chatbot.name);
       console.log(`Generated embeddings for ${file.name}`);
       
       processedDocuments.push(processedDoc);
@@ -51,8 +47,12 @@ export async function POST(req: NextRequest) {
       console.log(`Progress: ${Math.round(((i + 1) / documents.length) * 100)}%`);
     }
 
-    // Create chatbot with processed documents
-    const chatbot = await createChatbotWithDocuments(name, automaticPopup, popupText, session.user.id, processedDocuments);
+    // Update chatbot with processed documents
+    const createdDocuments = await Promise.all(processedDocuments.map(doc => 
+      Document.create({ name: doc.name, chunkCount: doc.chunkCount, chatbotId: chatbot._id })
+    ));
+    chatbot.documents = createdDocuments.map(doc => doc._id);
+    await chatbot.save();
 
     console.log(`Finished processing all documents for chatbot: ${name}`);
 
