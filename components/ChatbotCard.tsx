@@ -45,16 +45,13 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
   const handleDeleteConfirm = async () => {
     if (deleteConfirmation === chatbot.name) {
       try {
-        // First, delete the embeddings from Pinecone
-        await apiClient.delete(`/chatbot/${chatbot.id}/embeddings`);
-        
-        // Then, delete the chatbot from MongoDB
+        // Delete the chatbot and its associated data
         await apiClient.delete(`/chatbot/${chatbot.id}`);
         
         onDelete(chatbot.id);
         setDeleteDialogOpen(false);
         setDeleteConfirmation('');
-        toast.success('Chatbot deleted successfully');
+        toast.success('Chatbot and associated data deleted successfully');
       } catch (error) {
         console.error('Error deleting chatbot:', error);
         toast.error('Failed to delete chatbot. Please try again.');

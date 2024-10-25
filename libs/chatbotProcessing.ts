@@ -2,6 +2,8 @@ import OpenAI from 'openai';
 import Chatbot from '../models/chatbot';
 import Document from '../models/document';
 import { Pinecone } from "@pinecone-database/pinecone";
+import mammoth from 'mammoth';
+import docxParser from 'docx-parser';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -42,33 +44,100 @@ function chunkText(text: string, chunkSize: number, overlap: number) {
   return chunks;
 }
 
-export async function processDocument(file: File, chatbotId: string, chatbotName: string) {
-  const content = await file.text();
-  const chunks = chunkText(content, CHUNK_SIZE, CHUNK_OVERLAP);
-  const index = await initPinecone();
+async function extractTextFromDocx(arrayBuffer: ArrayBuffer): Promise<string> {
+  try {
+    const buffer = Buffer.from(arrayBuffer);
+    const result = await mammoth.extractRawText({ buffer: buffer });
+    return result.value;
+  } catch (error) {
+    console.error("Error extracting text from DOCX:", error);
+    throw new Error("Failed to extract text from DOCX file");
+  }
+}
 
-  const vectors = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const embedding = await generateEmbedding(chunk.text);
-    vectors.push({
-      id: `${file.name}-chunk-${i}`,
-      values: embedding,
-      metadata: {
-        text: chunk.text,
-        startIndex: chunk.startIndex,
-        endIndex: chunk.endIndex,
-        fileName: file.name,
-        chatbotId: chatbotId
+async function extractTextFromDoc(arrayBuffer: ArrayBuffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    docxParser.parseDocx(arrayBuffer, (err: Error | null, output: string) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(output);
       }
     });
+  });
+}
+
+export async function processDocument(file: File, chatbotId: string, chatbotName: string) {
+  let text = '';
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+
+    if (file.name.toLowerCase().endsWith('.docx')) {
+      text = await extractTextFromDocx(arrayBuffer);
+    } else if (file.name.toLowerCase().endsWith('.doc')) {
+      text = await extractTextFromDoc(arrayBuffer);
+    } else {
+      // For other file types, use the default text extraction
+      text = await file.text();
+    }
+
+    // Convert text to JSON
+    const jsonContent = {
+      fileName: file.name,
+      content: text,
+      chatbotId: chatbotId,
+      chatbotName: chatbotName
+    };
+
+    // Chunk the JSON content
+    const chunks = chunkJsonContent(jsonContent, CHUNK_SIZE, CHUNK_OVERLAP);
+    const index = await initPinecone();
+
+    const vectors = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const embedding = await generateEmbedding(JSON.stringify(chunk));
+      vectors.push({
+        id: `${file.name}-chunk-${i}`,
+        values: embedding,
+        metadata: {
+          ...chunk,
+          chunkIndex: i
+        }
+      });
+    }
+
+    // Use chatbotName and chatbotId as the namespace
+    const namespace = `${chatbotName}-${chatbotId}`;
+    await index.namespace(namespace).upsert(vectors);
+
+    return { name: file.name, chunkCount: chunks.length };
+  } catch (error) {
+    console.error(`Error processing document ${file.name}:`, error);
+    throw error;
+  }
+}
+
+function chunkJsonContent(jsonContent: any, chunkSize: number, overlap: number) {
+  const chunks = [];
+  const content = jsonContent.content;
+  let startIndex = 0;
+
+  while (startIndex < content.length) {
+    const endIndex = Math.min(startIndex + chunkSize, content.length);
+    chunks.push({
+      fileName: jsonContent.fileName,
+      content: content.slice(startIndex, endIndex),
+      chatbotId: jsonContent.chatbotId,
+      chatbotName: jsonContent.chatbotName,
+      startIndex,
+      endIndex
+    });
+    startIndex += chunkSize - overlap;
   }
 
-  // Use chatbotName and chatbotId as the namespace
-  const namespace = `${chatbotName}-${chatbotId}`;
-  await index.namespace(namespace).upsert(vectors);
-
-  return { name: file.name, chunkCount: chunks.length };
+  return chunks;
 }
 
 export async function createChatbotWithDocuments(name: string, automaticPopup: boolean, popupText: string, userId: string, processedDocuments: any[]) {
@@ -81,61 +150,75 @@ export async function createChatbotWithDocuments(name: string, automaticPopup: b
   return chatbot;
 }
 
-export async function searchEmbeddings(inputQuery: string, chatbotId: string, resultNum: number = 8) {
+const MAX_CHUNKS = 3;
+const MIN_RELEVANCE_SCORE = 0.7; // Adjust this value based on your needs
+
+export async function searchEmbeddings(inputQuery: string, chatbotId: string, resultNum: number = MAX_CHUNKS) {
   try {
     console.log(`Searching embeddings for query: "${inputQuery}" and chatbotId: ${chatbotId}`);
     const index = await initPinecone();
 
-    // Fetch the chatbot to get its name
     const chatbot = await Chatbot.findById(chatbotId);
     if (!chatbot) {
-      throw new Error(`Chatbot with id ${chatbotId} not found`);
+      console.error(`Chatbot with id ${chatbotId} not found`);
+      return { context: '', matches: [] };
     }
 
     const queryVector = await generateEmbedding(inputQuery);
 
-    // Use chatbotName and chatbotId as the namespace
     const namespace = `${chatbot.name}-${chatbotId}`;
+    console.log(`Querying Pinecone namespace: ${namespace}`);
     const queryResponse = await index.namespace(namespace).query({
       vector: queryVector,
       topK: resultNum,
       includeMetadata: true,
+      filter: { chatbotId: chatbotId }
     });
+
+    console.log('Raw Pinecone response:', JSON.stringify(queryResponse, null, 2));
 
     const matches = queryResponse.matches || [];
     console.log(`Found ${matches.length} matches`);
 
-    // Log all matches for debugging
-    matches.forEach((match, index) => {
-      console.log(`Match ${index + 1}:`);
-      console.log(`ID: ${match.id}`);
-      console.log(`Score: ${match.score}`);
-      console.log('Metadata:', match.metadata);
-    });
+    if (matches.length === 0) {
+      console.log('No matches found in Pinecone');
+      return { context: '', matches: [] };
+    }
 
-    // Prepare context for GPT
-    const contextChunks = matches.map(match => {
-      const fileName = match.metadata?.fileName || 'Unknown File';
-      const content = match.metadata?.text || 'No content available';
-      const embeddingChatbotId = match.metadata?.chatbotId || 'Unknown ChatbotId';
-      return `File: ${fileName}\nChatbotId: ${embeddingChatbotId}\nContent: ${content}`;
-    });
-    const context = contextChunks.join('\n\n');
+    console.log('First match:', JSON.stringify(matches[0], null, 2));
 
-    console.log('Generated context:', context);
+    const contextChunks = matches
+      .slice(0, MAX_CHUNKS)
+      .map(match => ({
+        content: `File: ${match.metadata?.fileName || 'Unknown File'}\nContent: ${match.metadata?.content || 'No content available'}`,
+        score: match.score ?? 0
+      }));
+
+    console.log(`Using ${contextChunks.length} chunks`);
+    console.log('First context chunk:', JSON.stringify(contextChunks[0], null, 2));
+
+    const combinedContext = contextChunks
+      .map((chunk, index) => `[${index + 1}] ${chunk.content}`)
+      .join('\n\n');
+
+    console.log('Generated context:', combinedContext);
+
+    if (!combinedContext.trim()) {
+      console.log('Generated context is empty');
+    }
 
     return {
-      context,
-      matches: matches.map(match => ({
+      context: combinedContext,
+      matches: matches.slice(0, MAX_CHUNKS).map(match => ({
         id: match.id,
-        score: match.score,
-        content: match.metadata?.text || 'No content available',
+        score: match.score ?? 0,
+        content: match.metadata?.content || 'No content available',
         fileName: match.metadata?.fileName || 'Unknown File',
         chatbotId: match.metadata?.chatbotId || 'Unknown ChatbotId',
       }))
     };
   } catch (error) {
     console.error('Error searching embeddings:', error);
-    throw error;
+    return { context: '', matches: [] };
   }
 }

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from 'react-hot-toast';
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
@@ -14,6 +14,25 @@ export function ChatInterface({ chatbotId }: { chatbotId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    // Fetch the system prompt when the component mounts
+    fetchSystemPrompt();
+  }, []);
+
+  const fetchSystemPrompt = async () => {
+    try {
+      const response = await fetch(`/api/chatbot/${chatbotId}/system-prompt`);
+      if (response.ok) {
+        const data = await response.json();
+        setMessages([{ role: 'system', content: data.systemPrompt }]);
+      } else {
+        console.error('Failed to fetch system prompt');
+      }
+    } catch (error) {
+      console.error('Error fetching system prompt:', error);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;

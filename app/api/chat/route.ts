@@ -10,9 +10,8 @@ export async function POST(req: Request) {
   }
 
   const { messages, chatbotId } = await req.json();
-
   try {
-    const response = await sendOpenAi(messages, parseInt(chatbotId));
+    const response = await sendOpenAi(messages, parseInt(chatbotId), session.user.id);
     return NextResponse.json({ response });
   } catch (error) {
     console.error('Error in chat API:', error);

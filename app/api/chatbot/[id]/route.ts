@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateUser, connectToDatabase, handleApiError } from '@/libs/utils';
 import Chatbot from '@/models/chatbot';
 import Document from '@/models/document';
+import { Pinecone } from "@pinecone-database/pinecone";
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -15,13 +16,29 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: "Chatbot not found" }, { status: 404 });
     }
 
-    // Delete associated documents
-    await Document.deleteMany({ chatbotId: chatbot._id });
+    // Check if the chatbot has associated documents
+    const documents = await Document.find({ chatbotId: chatbot._id });
+
+    if (documents.length > 0) {
+      // Delete embeddings from Pinecone
+      try {
+        const pinecone = new Pinecone();
+        const index = pinecone.Index("embeds-test");
+        const namespace = `${chatbot.name}-${chatbot.id}`;
+        await index.namespace(namespace).deleteAll();
+      } catch (pineconeError) {
+        console.error("Error deleting Pinecone embeddings:", pineconeError);
+        // Continue with chatbot deletion even if Pinecone deletion fails
+      }
+
+      // Delete associated documents
+      await Document.deleteMany({ chatbotId: chatbot._id });
+    }
 
     // Delete the chatbot
     await Chatbot.findByIdAndDelete(params.id);
 
-    return NextResponse.json({ message: "Chatbot deleted successfully" });
+    return NextResponse.json({ message: "Chatbot and associated data deleted successfully" });
   } catch (error) {
     return handleApiError(error, "Error deleting chatbot");
   }

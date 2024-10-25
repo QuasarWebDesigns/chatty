@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/libs/next-auth";
 import { sendOpenAi } from '@/libs/gpt';
 import { processDocument, createChatbotWithDocuments, searchEmbeddings } from '@/libs/chatbotProcessing';
+import { Types } from 'mongoose';
 
 // POST route to create a new chatbot
 export async function POST(req: NextRequest) {
@@ -33,18 +34,23 @@ export async function POST(req: NextRequest) {
 
     // Process each document
     const processedDocuments = [];
+    const errors = [];
     for (let i = 0; i < documents.length; i++) {
       const file = documents[i];
       console.log(`Processing document ${i + 1}/${documents.length}: ${file.name}`);
       
-      // Pass the chatbot name and ID to the processDocument function
-      const processedDoc = await processDocument(file, chatbot._id.toString(), chatbot.name);
-      console.log(`Generated embeddings for ${file.name}`);
-      
-      processedDocuments.push(processedDoc);
-      
-      console.log(`Finished processing ${file.name}`);
-      console.log(`Progress: ${Math.round(((i + 1) / documents.length) * 100)}%`);
+      try {
+        const processedDoc = await processDocument(file, chatbot._id.toString(), chatbot.name);
+        console.log(`Generated embeddings for ${file.name}`);
+        
+        processedDocuments.push(processedDoc);
+        
+        console.log(`Finished processing ${file.name}`);
+        console.log(`Progress: ${Math.round(((i + 1) / documents.length) * 100)}%`);
+      } catch (docError) {
+        console.error(`Error processing document ${file.name}:`, docError);
+        errors.push({ file: file.name, error: docError.message });
+      }
     }
 
     // Update chatbot with processed documents
@@ -56,7 +62,11 @@ export async function POST(req: NextRequest) {
 
     console.log(`Finished processing all documents for chatbot: ${name}`);
 
-    return NextResponse.json(chatbot.toJSON(), { status: 201 });
+    return NextResponse.json({ 
+      chatbot: chatbot.toJSON(), 
+      processedCount: processedDocuments.length,
+      errors: errors.length > 0 ? errors : undefined 
+    }, { status: 201 });
   } catch (error) {
     console.error("Error creating chatbot:", error);
     return NextResponse.json({ error: "Failed to create chatbot", details: error.message }, { status: 500 });
@@ -140,31 +150,38 @@ export async function PUT(req: NextRequest) {
 
     const { messages, chatbotId } = await req.json();
 
-    const chatbot = await Chatbot.findOne({ _id: chatbotId, userId: session.user.id });
+    if (!Types.ObjectId.isValid(chatbotId)) {
+      return NextResponse.json({ error: 'Invalid chatbotId' }, { status: 400 });
+    }
+
+    const chatbot = await Chatbot.findById(chatbotId);
     if (!chatbot) {
       return NextResponse.json({ error: "Chatbot not found or unauthorized" }, { status: 404 });
     }
 
-    // Get the last user message
-    const lastUserMessage = messages[messages.length - 1].content;
-
-    console.log(`Searching embeddings for chatbot ${chatbotId} with query: "${lastUserMessage}"`);
-
-    // Search for relevant embeddings
-    const { context } = await searchEmbeddings(lastUserMessage, chatbotId);
-
-    console.log('Context retrieved:', context);
-
-    // Send to OpenAI with context
-    const response = await sendOpenAi(messages, parseInt(chatbotId), context);
-
-    if (response) {
-      return NextResponse.json({ response });
-    } else {
-      return NextResponse.json({ error: 'Empty response from AI' }, { status: 500 });
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+    if (!lastUserMessage) {
+      return NextResponse.json({ error: 'No user message found' }, { status: 400 });
     }
+
+    const { context } = await searchEmbeddings(lastUserMessage.content, chatbotId);
+
+    const systemMessage = messages.find(m => m.role === 'system');
+    const updatedSystemMessage = {
+      role: 'system',
+      content: systemMessage ? `${systemMessage.content}\n\nUse the following context to answer the user's question:\n\n${context}` : `Use the following context to answer the user's question:\n\n${context}`
+    };
+
+    const messagesWithContext = [
+      updatedSystemMessage,
+      ...messages.filter(m => m.role !== 'system')
+    ];
+
+    const response = await sendOpenAi(messagesWithContext, parseInt(session.user.id), chatbotId);
+
+    return NextResponse.json({ response });
   } catch (error) {
-    console.error('Error in chat API:', error);
-    return NextResponse.json({ error: 'Failed to get response from AI', details: error.message }, { status: 500 });
+    console.error('Error processing chatbot request:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
