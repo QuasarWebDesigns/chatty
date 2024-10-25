@@ -159,14 +159,14 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Chatbot not found or unauthorized" }, { status: 404 });
     }
 
-    const lastUserMessage = messages.filter(m => m.role === 'user').pop();
+    const lastUserMessage = messages.filter((m: { role: string }) => m.role === 'user').pop();
     if (!lastUserMessage) {
       return NextResponse.json({ error: 'No user message found' }, { status: 400 });
     }
 
     const { context } = await searchEmbeddings(lastUserMessage.content, chatbotId);
 
-    const systemMessage = messages.find(m => m.role === 'system');
+    const systemMessage = messages.find((m: { role: string }) => m.role === 'system');
     const updatedSystemMessage = {
       role: 'system',
       content: systemMessage ? `${systemMessage.content}\n\nUse the following context to answer the user's question:\n\n${context}` : `Use the following context to answer the user's question:\n\n${context}`
@@ -174,7 +174,7 @@ export async function PUT(req: NextRequest) {
 
     const messagesWithContext = [
       updatedSystemMessage,
-      ...messages.filter(m => m.role !== 'system')
+      ...messages.filter((m: { role: string }) => m.role !== 'system')
     ];
 
     const response = await sendOpenAi(messagesWithContext, parseInt(session.user.id), chatbotId);

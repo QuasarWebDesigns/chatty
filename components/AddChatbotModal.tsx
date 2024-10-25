@@ -10,7 +10,7 @@ import axios from 'axios';
 import { X } from 'lucide-react'; // Import the X icon from lucide-react
 
 interface AddChatbotModalProps {
-  onChatbotCreated: (newChatbot: any) => void;
+  onChatbotCreated: () => void;
 }
 
 export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
@@ -57,14 +57,14 @@ export function AddChatbotModal({ onChatbotCreated }: AddChatbotModalProps) {
         },
       });
 
-      if (response.status === 201) {
-        const newChatbot = response.data;
-        onChatbotCreated(newChatbot);
+      if (response.status === 201 && response.data) {
+        const newChatbot = response.data.chatbot; // Assuming the API returns the chatbot data in this structure
         toast.success('Chatbot created successfully!');
         setOpen(false);
         resetForm();
+        onChatbotCreated(); // Call this function to refresh the chatbot list
       } else {
-        throw new Error('Failed to create chatbot');
+        throw new Error('Failed to create chatbot or invalid response');
       }
     } catch (error) {
       console.error('Error creating chatbot:', error);
