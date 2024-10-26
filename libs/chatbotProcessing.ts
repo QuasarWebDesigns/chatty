@@ -4,6 +4,7 @@ import Document from '../models/document';
 import { Pinecone } from "@pinecone-database/pinecone";
 import mammoth from 'mammoth';
 import docxParser from 'docx-parser';
+import EmbeddingChunk from '../models/embeddingChunk';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -78,11 +79,9 @@ export async function processDocument(file: File, chatbotId: string, chatbotName
     } else if (file.name.toLowerCase().endsWith('.doc')) {
       text = await extractTextFromDoc(arrayBuffer);
     } else {
-      // For other file types, use the default text extraction
       text = await file.text();
     }
 
-    // Convert text to JSON
     const jsonContent = {
       fileName: file.name,
       content: text,
@@ -90,27 +89,56 @@ export async function processDocument(file: File, chatbotId: string, chatbotName
       chatbotName: chatbotName
     };
 
-    // Chunk the JSON content
     const chunks = chunkJsonContent(jsonContent, CHUNK_SIZE, CHUNK_OVERLAP);
     const index = await initPinecone();
 
     const vectors = [];
+    const embeddingChunks = [];
+
+    // Create a new document in MongoDB
+    const document = await Document.create({
+      name: file.name,
+      chunkCount: chunks.length,
+      chatbotId: chatbotId
+    });
+
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const embedding = await generateEmbedding(JSON.stringify(chunk));
+      const chunkId = `${file.name}-chunk-${i}`;
+      const vectorId = chunkId; // Using the same ID for both chunkId and vectorId
+      
       vectors.push({
-        id: `${file.name}-chunk-${i}`,
+        id: vectorId,
         values: embedding,
         metadata: {
-          ...chunk,
-          chunkIndex: i
+          chatbotId: chatbotId,
+          content: chunk.content,
+          documentId: document._id.toString()
         }
       });
+
+      embeddingChunks.push({
+        chunkId: chunkId,
+        vectorId: vectorId,
+        documentId: document._id
+      });
     }
+
+    // Save embedding chunks to MongoDB
+    const savedEmbeddingChunks = await EmbeddingChunk.insertMany(embeddingChunks);
+
+    // Update the document with the embedding chunk IDs
+    document.embeddingChunks = savedEmbeddingChunks.map(chunk => chunk._id);
+    await document.save();
 
     // Use chatbotName and chatbotId as the namespace
     const namespace = `${chatbotName}-${chatbotId}`;
     await index.namespace(namespace).upsert(vectors);
+
+    console.log(`Processed document: ${file.name}`);
+    console.log(`Saved ${savedEmbeddingChunks.length} embedding chunks to MongoDB`);
+    console.log(`Upserted ${vectors.length} vectors to Pinecone`);
 
     return { name: file.name, chunkCount: chunks.length };
   } catch (error) {
@@ -142,11 +170,22 @@ function chunkJsonContent(jsonContent: any, chunkSize: number, overlap: number) 
 
 export async function createChatbotWithDocuments(name: string, automaticPopup: boolean, popupText: string, userId: string, processedDocuments: any[]) {
   const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId });
-  const createdDocuments = await Promise.all(processedDocuments.map(doc => 
-    Document.create({ name: doc.name, chunkCount: doc.chunkCount, chatbotId: chatbot._id })
-  ));
-  chatbot.documents = createdDocuments.map(doc => doc._id);
+  
+  const createdDocuments = await Promise.all(processedDocuments.map(async doc => {
+    const document = await Document.findOne({ name: doc.name, chatbotId: chatbot._id });
+    if (!document) {
+      console.error(`Document not found: ${doc.name}`);
+      return null;
+    }
+    return document;
+  }));
+
+  chatbot.documents = createdDocuments.filter(doc => doc !== null).map(doc => doc._id);
   await chatbot.save();
+
+  console.log(`Created chatbot: ${chatbot.name}`);
+  console.log(`Associated ${chatbot.documents.length} documents with the chatbot`);
+
   return chatbot;
 }
 
@@ -190,7 +229,7 @@ export async function searchEmbeddings(inputQuery: string, chatbotId: string, re
     const contextChunks = matches
       .slice(0, MAX_CHUNKS)
       .map(match => ({
-        content: `File: ${match.metadata?.fileName || 'Unknown File'}\nContent: ${match.metadata?.content || 'No content available'}`,
+        content: match.metadata?.content || 'No content available',
         score: match.score ?? 0
       }));
 
@@ -213,7 +252,7 @@ export async function searchEmbeddings(inputQuery: string, chatbotId: string, re
         id: match.id,
         score: match.score ?? 0,
         content: match.metadata?.content || 'No content available',
-        fileName: match.metadata?.fileName || 'Unknown File',
+        documentId: match.metadata?.documentId || 'Unknown DocumentId',
         chatbotId: match.metadata?.chatbotId || 'Unknown ChatbotId',
       }))
     };
