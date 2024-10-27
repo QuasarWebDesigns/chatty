@@ -20,6 +20,9 @@ const DocumentSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
+// Add compound unique index
+DocumentSchema.index({ name: 1, chatbotId: 1 }, { unique: true });
+
 const Document = mongoose.models.Document || mongoose.model("Document", DocumentSchema);
 
 export default Document;

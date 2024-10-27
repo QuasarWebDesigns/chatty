@@ -72,6 +72,20 @@ export async function processDocument(file: File, chatbotId: string, chatbotName
   let text = '';
 
   try {
+    // Check if document already exists
+    const existingDoc = await Document.findOne({ 
+      name: file.name, 
+      chatbotId: chatbotId 
+    });
+
+    if (existingDoc) {
+      console.log(`Document ${file.name} already exists for this chatbot`);
+      return { 
+        name: existingDoc.name, 
+        chunkCount: existingDoc.chunkCount 
+      };
+    }
+
     const arrayBuffer = await file.arrayBuffer();
 
     if (file.name.toLowerCase().endsWith('.docx')) {
@@ -95,7 +109,7 @@ export async function processDocument(file: File, chatbotId: string, chatbotName
     const vectors = [];
     const embeddingChunks = [];
 
-    // Create a new document in MongoDB
+    // Create a new document in MongoDB with a unique compound index
     const document = await Document.create({
       name: file.name,
       chunkCount: chunks.length,

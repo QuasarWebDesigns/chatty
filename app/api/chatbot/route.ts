@@ -10,57 +10,51 @@ import { Types } from 'mongoose';
 
 // POST route to create a new chatbot
 export async function POST(req: NextRequest) {
-  // Authenticate user
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  await connectMongo();
-
-  const formData = await req.formData();
-  const name = formData.get('name') as string;
-  const automaticPopup = formData.get('automaticPopup') === 'true';
-  const popupText = formData.get('popupText') as string;
-  const documents = formData.getAll('documents') as File[];
-
-  if (!name || documents.length === 0) {
-    return NextResponse.json({ error: "Name and documents are required" }, { status: 400 });
-  }
-
   try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    await connectMongo();
+
+    const formData = await req.formData();
+    const name = formData.get('name') as string;
+    const automaticPopup = formData.get('automaticPopup') === 'true';
+    const popupText = formData.get('popupText') as string;
+    const uploadedFiles = formData.getAll('documents') as File[];
+
+    if (!name || uploadedFiles.length === 0) {
+      return NextResponse.json({ error: "Name and documents are required" }, { status: 400 });
+    }
+
     // Create chatbot first to get the ID
     const chatbot = await Chatbot.create({ name, automaticPopup, popupText, userId: session.user.id });
 
     // Process each document
     const processedDocuments = [];
     const errors = [];
-    for (let i = 0; i < documents.length; i++) {
-      const file = documents[i];
-      console.log(`Processing document ${i + 1}/${documents.length}: ${file.name}`);
+    for (let i = 0; i < uploadedFiles.length; i++) {
+      const file = uploadedFiles[i];
+      console.log(`Processing document ${i + 1}/${uploadedFiles.length}: ${file.name}`);
       
       try {
         const processedDoc = await processDocument(file, chatbot._id.toString(), chatbot.name);
-        console.log(`Generated embeddings for ${file.name}`);
-        
         processedDocuments.push(processedDoc);
         
         console.log(`Finished processing ${file.name}`);
-        console.log(`Progress: ${Math.round(((i + 1) / documents.length) * 100)}%`);
+        console.log(`Progress: ${Math.round(((i + 1) / uploadedFiles.length) * 100)}%`);
       } catch (docError) {
         console.error(`Error processing document ${file.name}:`, docError);
         errors.push({ file: file.name, error: docError.message });
       }
     }
 
-    // Update chatbot with processed documents
-    const createdDocuments = await Promise.all(processedDocuments.map(doc => 
-      Document.create({ name: doc.name, chunkCount: doc.chunkCount, chatbotId: chatbot._id })
-    ));
-    chatbot.documents = createdDocuments.map(doc => doc._id);
+    // Update chatbot with document references
+    // Note: Documents are already created in processDocument()
+    const savedDocuments = await Document.find({ chatbotId: chatbot._id });
+    chatbot.documents = savedDocuments.map(doc => doc._id);
     await chatbot.save();
-
-    console.log(`Finished processing all documents for chatbot: ${name}`);
 
     return NextResponse.json({ 
       chatbot: chatbot.toJSON(), 
