@@ -11,6 +11,7 @@ import { ChatInterface } from '@/components/ChatInterface';
 import { Settings } from 'lucide-react'; // Import the Settings icon
 import { EmbeddingModal } from '@/components/EmbeddingModal';
 import apiClient from '@/libs/api';
+import { useRouter } from 'next/navigation';
 
 interface SerializedChatbot {
   id: string;
@@ -29,13 +30,15 @@ export function ChatbotCard({ chatbot, onDelete }: { chatbot: SerializedChatbot;
   const [chatInterfaceOpen, setChatInterfaceOpen] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [embeddingModalOpen, setEmbeddingModalOpen] = useState(false);
+  const router = useRouter();
 
   const handleEmbedding = () => {
     setEmbeddingModalOpen(true);
   };
 
   const handleSettings = () => {
-    setSettingsDialogOpen(true);
+    // Navigate to settings page instead of opening dialog
+    router.push(`/dashboard/chatbot/${chatbot.id}/settings`);
   };
 
   const handleDeleteClick = () => {
