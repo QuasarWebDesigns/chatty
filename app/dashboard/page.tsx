@@ -3,7 +3,7 @@ import { authOptions } from "@/libs/next-auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Play, ArrowRight } from "lucide-react";
+import { Play, ArrowRight, FileText, HelpCircle } from "lucide-react";
 import SubscriptionBanner from "@/components/SubscriptionBanner";
 import { Sidebar } from "@/components/Sidebar";
 import connectMongo from "@/libs/mongoose";
@@ -40,57 +40,103 @@ export default async function Dashboard() {
       <div className="flex flex-1">
         <Sidebar />
         <main className="flex-1 p-8 pb-24">
-          <section className="max-w-xl mx-auto space-y-8">
-            <h1 className="text-3xl md:text-4xl font-extrabold">Dashboard</h1>
-          </section>
+          <div className="max-w-[1200px] mx-auto">
+            {/* Header */}
+            <div className="mb-12">
+              <div className="text-center mb-4">
+                <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
+                <p className="text-muted-foreground">
+                  Manage your chatbots and settings
+                </p>
+              </div>
+            </div>
 
-          <div className="flex justify-between items-center mb-8">
-            <h2 className="text-3xl font-bold">Chatbots</h2>
-            <div className="flex items-center space-x-4">
-              <Input type="search" placeholder="Search your chatbot" className="max-w-sm" />
+            {/* Chatbots Section */}
+            <div className="bg-card rounded-lg border p-6 shadow-sm mb-8">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold mb-1">Your Chatbots</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Create and manage your AI chatbots
+                  </p>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <Input 
+                    type="search" 
+                    placeholder="Search chatbots..." 
+                    className="max-w-sm"
+                  />
+                </div>
+              </div>
+
+              <ChatbotList initialChatbots={serializedChatbots} />
+            </div>
+
+            {/* Get Started Section */}
+            <div className="bg-card rounded-lg border p-6 shadow-sm">
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold mb-1">Get Started</h2>
+                <p className="text-sm text-muted-foreground">
+                  Learn how to use and configure your chatbots
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="group hover:shadow-md transition-all">
+                  <CardContent className="p-6">
+                    <div className="flex items-center mb-4">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-4">
+                        <Play className="h-5 w-5 text-primary" />
+                      </div>
+                      <h3 className="font-semibold">Quick Start Guide</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Learn how to create and configure your chatbots
+                    </p>
+                    <Button variant="outline" className="w-full rounded-full">
+                      <Play size={16} className="mr-2" /> Watch Tutorial
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="group hover:shadow-md transition-all">
+                  <CardContent className="p-6">
+                    <div className="flex items-center mb-4">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-4">
+                        <FileText className="h-5 w-5 text-primary" />
+                      </div>
+                      <h3 className="font-semibold">Documentation</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Learn the basics of ChatBot within minutes
+                    </p>
+                    <Button variant="outline" className="w-full rounded-full">
+                      Start Learning
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="group hover:shadow-md transition-all">
+                  <CardContent className="p-6">
+                    <div className="flex items-center mb-4">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center mr-4">
+                        <HelpCircle className="h-5 w-5 text-primary" />
+                      </div>
+                      <h3 className="font-semibold">Help Center</h3>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Visit our Help Center to learn more
+                    </p>
+                    <Button variant="outline" className="w-full rounded-full" asChild>
+                      <Link href="/help-center">
+                        Explore <ArrowRight size={16} className="ml-2" />
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
-
-          <ChatbotList initialChatbots={serializedChatbots} />
-
-          <section>
-            <h2 className="text-2xl font-semibold mb-4">Get started</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center mb-4">
-                    <div className="w-10 h-10 rounded-full bg-yellow-400 mr-4"></div>
-                    <h3 className="font-semibold">How to start building your chatbots</h3>
-                  </div>
-                  <Button variant="outline" className="rounded-full">
-                    <Play size={16} className="mr-2" /> Watch
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center mb-4">
-                    <div className="w-10 h-10 rounded-full bg-green-400 mr-4"></div>
-                    <h3 className="font-semibold">Learn the basics of ChatBot within minutes</h3>
-                  </div>
-                  <Button variant="outline" className="rounded-full">Start lesson</Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6">
-                  <h3 className="font-semibold mb-2">Help Center</h3>
-                  <p className="mb-4">Visit our Help Center to learn more about ChatBot setup.</p>
-                  <Button variant="outline" className="rounded-full" asChild>
-                    <Link href="/help-center">
-                      Explore <ArrowRight size={16} className="ml-2" />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </section>
         </main>
       </div>
     </div>
