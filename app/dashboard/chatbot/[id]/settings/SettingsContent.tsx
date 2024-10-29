@@ -7,6 +7,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import toast from "react-hot-toast";
+
 
 export default function SettingsContent({ chatbotId }: { chatbotId: string }) {
   const [activeView, setActiveView] = useState<'files' | 'web'>('files');
@@ -18,9 +20,13 @@ export default function SettingsContent({ chatbotId }: { chatbotId: string }) {
     async function fetchData() {
       try {
         const [chatbotRes, documentsRes] = await Promise.all([
-          fetch(`/api/chatbots/${chatbotId}`),
-          fetch(`/api/chatbots/${chatbotId}/documents`)
+          fetch(`/api/chatbot/${chatbotId}`),
+          fetch(`/api/chatbot/${chatbotId}/documents`)
         ]);
+        
+        if (!chatbotRes.ok || !documentsRes.ok) {
+          throw new Error('Failed to fetch data');
+        }
         
         const chatbotData = await chatbotRes.json();
         const documentsData = await documentsRes.json();
@@ -29,6 +35,7 @@ export default function SettingsContent({ chatbotId }: { chatbotId: string }) {
         setDocuments(documentsData);
       } catch (error) {
         console.error('Error fetching data:', error);
+        toast.error('Failed to load chatbot data');
       } finally {
         setLoading(false);
       }

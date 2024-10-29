@@ -4,6 +4,26 @@ import Chatbot from '@/models/chatbot';
 import Document from '@/models/document';
 import { Pinecone } from "@pinecone-database/pinecone";
 
+// Get a single chatbot
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { error } = await authenticateUser();
+    if (error) return error;
+
+    await connectToDatabase();
+
+    const chatbot = await Chatbot.findById(params.id);
+    if (!chatbot) {
+      return NextResponse.json({ error: "Chatbot not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(chatbot);
+  } catch (error) {
+    return handleApiError(error, "Error fetching chatbot");
+  }
+}
+
+// Delete a chatbot and its associated data
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { error } = await authenticateUser();
@@ -28,7 +48,6 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
         await index.namespace(namespace).deleteAll();
       } catch (pineconeError) {
         console.error("Error deleting Pinecone embeddings:", pineconeError);
-        // Continue with chatbot deletion even if Pinecone deletion fails
       }
 
       // Delete associated documents
