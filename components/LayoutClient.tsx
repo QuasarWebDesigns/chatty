@@ -21,11 +21,11 @@ const CrispChat = (): null => {
       // Set up Crisp
       Crisp.configure(config.crisp.id);
 
-      // (Optional) If onlyShowOnRoutes array is not empty in config.js file, Crisp will be hidden on the routes in the array.
-      // Use <AppButtonSupport> instead to show it (user clicks on the button to show Crisp—it cleans the UI)
+      // Add null check for pathname and ensure onlyShowOnRoutes is defined
       if (
         config.crisp.onlyShowOnRoutes &&
-        !config.crisp.onlyShowOnRoutes?.includes(pathname)
+        pathname &&
+        !config.crisp.onlyShowOnRoutes.includes(pathname)
       ) {
         Crisp.chat.hide();
         Crisp.chat.onChatClosed(() => {

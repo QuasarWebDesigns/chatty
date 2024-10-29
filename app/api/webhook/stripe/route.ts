@@ -6,22 +6,32 @@ import configFile from "@/config";
 import User from "@/models/User";
 import { findCheckoutSession } from "@/libs/stripe";
 
+// Check for STRIPE_SECRET_KEY
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('STRIPE_SECRET_KEY is not defined');
+}
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2023-08-16",
   typescript: true,
 });
-const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-// This is where we receive Stripe webhook events
-// It used to update the user data, send emails, etc...
-// By default, it'll store the user in the database
-// See more: https://shipfa.st/docs/features/payments
+// Type assertion for webhook secret since it might be undefined
+const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
+
+// Remove the signature check here since it's not defined yet
+// We'll check it inside the POST handler
+
 export async function POST(req: NextRequest) {
   await connectMongo();
 
   const body = await req.text();
-
   const signature = headers().get("stripe-signature");
+
+  // Check for signature here
+  if (!signature) {
+    return NextResponse.json({ error: 'No signature found in request' }, { status: 400 });
+  }
 
   let eventType;
   let event;
@@ -46,8 +56,8 @@ export async function POST(req: NextRequest) {
 
         const session = await findCheckoutSession(stripeObject.id);
 
-        const customerId = session?.customer;
-        const priceId = session?.line_items?.data[0]?.price.id;
+        const customerId = session?.customer ?? null;
+        const priceId = session?.line_items?.data[0]?.price?.id;
         const userId = stripeObject.client_reference_id;
         const plan = configFile.stripe.plans.find((p) => p.priceId === priceId);
 
@@ -132,8 +142,17 @@ export async function POST(req: NextRequest) {
         const stripeObject: Stripe.Invoice = event.data
           .object as Stripe.Invoice;
 
+        // Ensure stripeObject and its properties are not null or undefined
+        if (!stripeObject || !stripeObject.lines || !stripeObject.lines.data[0] || !stripeObject.lines.data[0].price) {
+          throw new Error("Invalid Stripe object structure");
+        }
+
         const priceId = stripeObject.lines.data[0].price.id;
         const customerId = stripeObject.customer;
+
+        if (!customerId) {
+          throw new Error("Customer ID is null or undefined");
+        }
 
         const user = await User.findOne({ customerId });
 
