@@ -10,6 +10,9 @@ import connectMongo from "@/libs/mongoose";
 import Chatbot from "@/models/chatbot";
 import { ChatbotList } from "@/components/ChatbotList";
 import { Card, CardContent } from "@/components/ui/card";
+import config from "@/config";
+import User from "@/models/User";
+import ButtonAccount from "@/components/ButtonAccount";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +25,10 @@ export default async function Dashboard() {
 
   await connectMongo();
   const chatbots = await Chatbot.find({ userId: session.user.id });
+  const user = await User.findById(session.user.id);
+  
+  // Get the current plan details
+  const currentPlan = config.stripe.plans.find(plan => plan.priceId === user?.priceId);
 
   // Serialize the chatbot data
   const serializedChatbots = chatbots.map(chatbot => ({
@@ -41,13 +48,23 @@ export default async function Dashboard() {
         <Sidebar />
         <main className="flex-1 p-8 pb-24">
           <div className="max-w-[1200px] mx-auto">
-            {/* Header */}
+            {/* Header with Plan Info */}
             <div className="mb-12">
               <div className="text-center mb-4">
                 <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
                 <p className="text-muted-foreground">
                   Manage your chatbots and settings
                 </p>
+                {currentPlan && (
+                  <div className="mt-4 space-y-2">
+                    <span className="inline-flex items-center px-4 py-2 rounded-full bg-primary/10 text-primary">
+                      Current Plan: {currentPlan.name} - ${currentPlan.price}/month
+                    </span>
+                    <div>
+                      <ButtonAccount /> {/* This includes the billing portal access */}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
